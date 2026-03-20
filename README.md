@@ -10,6 +10,8 @@ Unified web page interaction skill for Claude Code. Automatically extracts conte
 - **SPA support**: Waits for JavaScript hydration on React/Vue/Next.js pages
 - **Security hardened**: URL validation prevents command injection, TLS skip only as last resort
 - **Helper script**: `extract.mjs` — one-command extraction with automatic fallback
+- **35 diverse test cases**: static HTML, JSON APIs, XML, redirects, selectors, UTF-8, Wikipedia, GitHub, HN, StackOverflow, MDN, arxiv, and more
+- **Chrome CDP with inline WebSocket eval**: `cdp-eval.mjs` uses Node 22 built-in WebSocket for zero-dependency CDP evaluation
 
 ## Quick Install
 
@@ -27,15 +29,17 @@ bash install.sh
 | ghost-os | Optional | `brew install ghost-os` |
 | chrome-cdp | Optional | Already included if you have the chrome-cdp skill |
 | Node.js 18+ | Yes | `brew install node` |
+| Node.js 22+ | Optional, for chrome-cdp tier | `brew install node` (update to 22+) |
 
 ## How It Works
 
-### Strategy: Fast-Path First, Escalate on Failure
+### Strategy: 5-Tier Automatic Escalation
 
 1. **curl fast-path** (1-2s) — works for static content, APIs, server-rendered HTML
 2. **agent-browser** (5-15s) — JavaScript rendering, SPAs, form interaction
-3. **chrome-cdp** (instant) — uses your real Chrome session (logged-in sites)
-4. **ghost-os** (varies) — desktop apps, visual grounding, CAPTCHA solving
+3. **chrome-cdp via cdp-eval.mjs** (3-10s) — real Chrome session, bypasses bot detection
+4. **curl -k** (1-2s) — last-resort TLS skip for self-signed certs
+5. **ghost-os** (manual) — desktop apps, CAPTCHA, visual grounding
 
 ### Decision Tree
 
@@ -118,6 +122,7 @@ $CDP click <target> "button.submit"  # click by CSS selector
 | Server-rendered (GitHub) | curl fast-path | 2.4s |
 | JS-rendered (HN) | agent-browser | ~5s |
 | CSS selector needed | browser fallback | ~7s |
+| Chrome CDP (logged-in) | chrome-cdp + cdp-eval.mjs | ~5s |
 
 ## EvoSkill Integration (Optional)
 
@@ -167,6 +172,7 @@ Custom scorer supports exact match, CONTAINS:, RANGE:, and DYNAMIC_CHECK pattern
 - **TLS verification on by default**: `curl -k` is NOT used by default — only as a last-resort fallback after both normal curl and browser extraction fail, with a stderr warning
 - **Selector sanitization**: CSS selectors are escaped via `JSON.stringify` before being eval'd in browser context
 - **Credential safety**: ghost-os auth flows warn against hardcoding passwords in conversation context
+- **Chrome CDP uses HTTP API only for tab management** (no shell interpolation); WebSocket connection is direct to localhost
 
 ## Skill Files
 
@@ -175,6 +181,8 @@ Custom scorer supports exact match, CONTAINS:, RANGE:, and DYNAMIC_CHECK pattern
 | `skill/SKILL.md` | Main instructions (loaded by Claude Code) |
 | `skill/REFERENCE.md` | Advanced patterns, auth, cookies, network |
 | `skill/scripts/extract.mjs` | One-command extraction with curl→browser→curl-k fallback |
+| `skill/scripts/cdp-eval.mjs` | CDP WebSocket eval helper (Node 22+) |
+| `skill/scripts/test-extract.mjs` | Test harness with 35 diverse URL test cases |
 
 ## License
 

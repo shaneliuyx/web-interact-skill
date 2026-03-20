@@ -25,7 +25,7 @@ allowed-tools:
 
 **1. curl fast-path** (1-2s) — static content, APIs, JSON, XML, plain text.
 **2. agent-browser** (5-15s) — JS rendering, SPAs, form interaction.
-**3. chrome-cdp** (3-10s) — real Chrome session, bypasses bot detection. Auto-tried by `extract.mjs`.
+**3. chrome-cdp** (3-10s) — real Chrome session via cdp-eval.mjs (Node 22 WebSocket), bypasses bot detection. Auto-tried by `extract.mjs`. Requires Chrome running with `--remote-debugging-port=9222`.
 **4. curl -k** (1-2s) — last-resort TLS skip for self-signed certs.
 **5. ghost-os** (manual) — desktop apps, CAPTCHA, visual grounding. Script outputs `ESCALATE` message; Claude handles via MCP tools.
 
@@ -107,5 +107,7 @@ Use MCP tools directly:
 # Quick extraction with automatic fallback
 node ~/.claude/skills/web-interact/scripts/extract.mjs <url> [css-selector]
 ```
+
+The CDP tier requires Node 22+ (for built-in WebSocket) and Chrome with `--remote-debugging-port=9222`.
 
 See [REFERENCE.md](REFERENCE.md) for auth flows, cookies, network interception, and mobile emulation.

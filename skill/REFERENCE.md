@@ -177,6 +177,8 @@ For simple read-only extraction with automatic curl→browser fallback:
 node ~/.claude/skills/web-interact/scripts/extract.mjs <url> [css-selector]
 ```
 
-- Tries curl first (1-2s), falls back to agent-browser (5-15s), then curl with TLS skip
+- 5-tier fallback: curl (1-2s) → agent-browser (5-15s) → chrome-cdp via cdp-eval.mjs (3-10s) → curl -k (1-2s) → ESCALATE to ghost-os
+- Chrome CDP tier requires Node 22+ and Chrome with `--remote-debugging-port=9222`
+- Chrome 146+ requires PUT verb for /json/new and /json/close endpoints
 - URL is validated and sanitized before use
 - CSS selectors require the browser path (curl path skips them automatically)
