@@ -4,6 +4,7 @@
 // Strategy: curl fast-path → agent-browser (no TLS skip) → curl -k retry → error
 
 import { execSync, spawnSync } from 'child_process';
+import { join } from 'path';
 
 const url = process.argv[2];
 const selector = process.argv[3];
@@ -170,9 +171,29 @@ function tryBrowser() {
 function tryCdp() {
   const cdpScript = join(process.env.HOME || '', '.claude/skills/chrome-cdp/scripts/cdp.mjs');
 
+  // cdp.mjs requires Node 22+ (built-in WebSocket). Find it.
+  const node22Paths = [
+    '/opt/homebrew/opt/node@22/bin/node',
+    '/usr/local/opt/node@22/bin/node',
+    '/usr/local/bin/node22',
+  ];
+  let node22 = null;
+  for (const p of node22Paths) {
+    try {
+      const v = spawnSync(p, ['--version'], { encoding: 'utf-8', timeout: 3000 });
+      if (v.status === 0 && parseInt(v.stdout.trim().replace('v','')) >= 22) { node22 = p; break; }
+    } catch {}
+  }
+  // Fallback: check if default node is 22+
+  if (!node22) {
+    const major = parseInt(process.versions.node);
+    if (major >= 22) node22 = process.execPath;
+  }
+  if (!node22) return null; // No Node 22 available, skip cdp tier
+
   try {
     // Check if Chrome is running with debugging
-    const listResult = spawnSync('node', [cdpScript, 'list'], {
+    const listResult = spawnSync(node22, [cdpScript, 'list'], {
       encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe']
     });
     if (listResult.status !== 0 || !listResult.stdout.trim()) {
@@ -180,7 +201,7 @@ function tryCdp() {
     }
 
     // Open a new tab and navigate
-    const openResult = spawnSync('node', [cdpScript, 'open', safeUrl], {
+    const openResult = spawnSync(node22, [cdpScript, 'open', safeUrl], {
       encoding: 'utf-8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe']
     });
     if (openResult.status !== 0) return null;
@@ -192,7 +213,7 @@ function tryCdp() {
     const target = targetMatch[1];
 
     // Wait for page load
-    spawnSync('node', [cdpScript, 'nav', target, safeUrl], {
+    spawnSync(node22, [cdpScript, 'nav', target, safeUrl], {
       encoding: 'utf-8', timeout: 30000, stdio: ['pipe', 'pipe', 'pipe']
     });
 
@@ -204,14 +225,14 @@ function tryCdp() {
       jsExpr = `(() => { const sels = ['article','main','[role=main]','.content','#content']; for (const s of sels) { const el = document.querySelector(s); if (el && el.innerText.trim().length > 100) return document.title + '\\n\\n' + el.innerText.trim(); } const c = document.body.cloneNode(true); c.querySelectorAll('nav,footer,header,script,style,noscript').forEach(e=>e.remove()); return document.title + '\\n\\n' + c.innerText.trim(); })()`;
     }
 
-    const evalResult = spawnSync('node', [cdpScript, 'eval', target, jsExpr], {
+    const evalResult = spawnSync(node22, [cdpScript, 'eval', target, jsExpr], {
       encoding: 'utf-8', timeout: 15000, maxBuffer: 10 * 1024 * 1024,
       stdio: ['pipe', 'pipe', 'pipe']
     });
 
     // Close the tab we opened
     try {
-      spawnSync('node', [cdpScript, 'evalraw', target, 'Target.closeTarget', JSON.stringify({targetId: target})], {
+      spawnSync(node22, [cdpScript, 'evalraw', target, 'Target.closeTarget', JSON.stringify({targetId: target})], {
         encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe']
       });
     } catch {}
@@ -227,7 +248,7 @@ function tryCdp() {
 
     // Fallback: try html command
     const htmlArgs = selector ? [cdpScript, 'html', target, selector] : [cdpScript, 'html', target];
-    const htmlResult = spawnSync('node', htmlArgs, {
+    const htmlResult = spawnSync(node22, htmlArgs, {
       encoding: 'utf-8', timeout: 15000, maxBuffer: 10 * 1024 * 1024,
       stdio: ['pipe', 'pipe', 'pipe']
     });
