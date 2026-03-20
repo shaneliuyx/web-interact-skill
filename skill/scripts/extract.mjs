@@ -43,7 +43,7 @@ function evalJS(code) {
 // skipTls=true only used as fallback after cert error
 function tryCurl(skipTls = false) {
   try {
-    const args = ['curl', '-sL', '-m', '10',
+    const args = ['curl', '-sL', '-m', '10', '--compressed',
       '-H', 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'];
     if (skipTls) args.push('-k');
     args.push(safeUrl);
@@ -67,6 +67,19 @@ function tryCurl(skipTls = false) {
     if (selector) {
       // Can't use CSS selectors without DOM — fall through to browser
       return null;
+    }
+
+    // Detect non-HTML content (JSON, plain text, XML) — return directly
+    const trimmed = html.trimStart();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      // JSON response — return as-is (truncated)
+      return html.substring(0, 10000);
+    }
+    if (!trimmed.includes('<html') && !trimmed.includes('<HTML') &&
+        !trimmed.includes('<!DOCTYPE') && !trimmed.includes('<!doctype') &&
+        !trimmed.includes('<head') && !trimmed.includes('<body')) {
+      // Plain text or non-HTML — return as-is
+      return html.substring(0, 10000);
     }
 
     // Extract title
@@ -114,7 +127,9 @@ function tryBrowser() {
         const sel = ${safeSelector};
         const el = document.querySelector(sel);
         if (!el) return 'SELECTOR_NOT_FOUND: ' + sel;
-        return el.innerText;
+        const title = document.title || '';
+        const text = el.innerText.trim();
+        return (title ? '# ' + title + '\\n\\n' : '') + '[' + sel + '] ' + text;
       })()`;
     } else {
       jsCode = `(() => {
