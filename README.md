@@ -8,6 +8,7 @@ Unified web page interaction skill for Claude Code. Automatically extracts conte
 - **Three automation layers**: agent-browser (headless Playwright) → chrome-cdp (existing Chrome) → ghost-os (desktop GUI)
 - **Automatic fallback chain**: SSL errors, WAF detection, timeouts all handled with strategy switching
 - **SPA support**: Waits for JavaScript hydration on React/Vue/Next.js pages
+- **Security hardened**: URL validation prevents command injection, TLS skip only as last resort
 - **Helper script**: `extract.mjs` — one-command extraction with automatic fallback
 
 ## Quick Install
@@ -103,9 +104,9 @@ $CDP click <target> "button.submit"  # click by CSS selector
 
 | Error | Cause | Auto-fix |
 |-------|-------|----------|
-| SSL cert error | Invalid certificate | curl `-k` bypasses |
+| SSL cert error | Invalid certificate | Retries curl with `-k` as last resort (with warning) |
 | Access Denied / 403 | WAF/bot detection | Switch to chrome-cdp |
-| Timeout on wait | Heavy site | `load` + delay (no networkidle) |
+| Timeout on wait | Heavy site | `load` + delay (never networkidle) |
 | Empty body | SPA not hydrated | `wait --fn` for element |
 | CAPTCHA | Bot protection | chrome-cdp or ghost-os |
 
@@ -159,13 +160,21 @@ uv run python scripts/run_loop_webextract.py --mode skill_only --max-iterations 
 20 questions across 3 categories: static (10), dynamic (6), metadata (4).
 Custom scorer supports exact match, CONTAINS:, RANGE:, and DYNAMIC_CHECK patterns.
 
+## Security
+
+- **URL validation**: All URLs are parsed via `new URL()` and must be `http:` or `https:` — prevents command injection via shell metacharacters
+- **No shell interpolation**: `extract.mjs` uses `spawnSync` with argument arrays instead of string interpolation for curl and agent-browser commands
+- **TLS verification on by default**: `curl -k` is NOT used by default — only as a last-resort fallback after both normal curl and browser extraction fail, with a stderr warning
+- **Selector sanitization**: CSS selectors are escaped via `JSON.stringify` before being eval'd in browser context
+- **Credential safety**: ghost-os auth flows warn against hardcoding passwords in conversation context
+
 ## Skill Files
 
 | File | Purpose |
 |------|---------|
 | `skill/SKILL.md` | Main instructions (loaded by Claude Code) |
 | `skill/REFERENCE.md` | Advanced patterns, auth, cookies, network |
-| `skill/scripts/extract.mjs` | One-command extraction with curl→browser fallback |
+| `skill/scripts/extract.mjs` | One-command extraction with curl→browser→curl-k fallback |
 
 ## License
 
