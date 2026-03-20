@@ -192,28 +192,27 @@ function tryCdp() {
   if (!node22) return null; // No Node 22 available, skip cdp tier
 
   try {
-    // Check if Chrome is running with debugging
-    const listResult = spawnSync(node22, [cdpScript, 'list'], {
+    // Use HTTP API to check if Chrome debugging is available (not WebSocket)
+    const checkResult = spawnSync('curl', ['-s', '-m', '2', 'http://localhost:9222/json/version'], {
       encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe']
     });
-    if (listResult.status !== 0 || !listResult.stdout.trim()) {
-      return null; // Chrome not running or no debugging
+    if (checkResult.status !== 0 || !checkResult.stdout.includes('Browser')) {
+      return null; // Chrome not running with debugging
     }
 
-    // Open a new tab and navigate
-    const openResult = spawnSync(node22, [cdpScript, 'open', safeUrl], {
-      encoding: 'utf-8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe']
+    // Open new tab via HTTP API and navigate to URL
+    const newTabResult = spawnSync('curl', ['-s', '-m', '5', `http://localhost:9222/json/new?${encodeURIComponent(safeUrl)}`], {
+      encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe']
     });
-    if (openResult.status !== 0) return null;
+    if (newTabResult.status !== 0) return null;
 
-    // Extract target ID from open output (usually the last line has the target prefix)
-    const openOutput = openResult.stdout.trim();
-    const targetMatch = openOutput.match(/([A-F0-9]{4,})/i);
-    if (!targetMatch) return null;
-    const target = targetMatch[1];
+    let tabInfo;
+    try { tabInfo = JSON.parse(newTabResult.stdout); } catch { return null; }
+    const target = tabInfo.id;
+    if (!target) return null;
 
-    // Wait for page load
-    spawnSync(node22, [cdpScript, 'nav', target, safeUrl], {
+    // Wait for page load via cdp.mjs nav (uses WebSocket per-tab, which works)
+    spawnSync(node22, [cdpScript, 'nav', target.substring(0, 4), safeUrl], {
       encoding: 'utf-8', timeout: 30000, stdio: ['pipe', 'pipe', 'pipe']
     });
 
@@ -225,14 +224,15 @@ function tryCdp() {
       jsExpr = `(() => { const sels = ['article','main','[role=main]','.content','#content']; for (const s of sels) { const el = document.querySelector(s); if (el && el.innerText.trim().length > 100) return document.title + '\\n\\n' + el.innerText.trim(); } const c = document.body.cloneNode(true); c.querySelectorAll('nav,footer,header,script,style,noscript').forEach(e=>e.remove()); return document.title + '\\n\\n' + c.innerText.trim(); })()`;
     }
 
-    const evalResult = spawnSync(node22, [cdpScript, 'eval', target, jsExpr], {
+    const targetPrefix = target.substring(0, 4);
+    const evalResult = spawnSync(node22, [cdpScript, 'eval', targetPrefix, jsExpr], {
       encoding: 'utf-8', timeout: 15000, maxBuffer: 10 * 1024 * 1024,
       stdio: ['pipe', 'pipe', 'pipe']
     });
 
-    // Close the tab we opened
+    // Close the tab we opened via HTTP API
     try {
-      spawnSync(node22, [cdpScript, 'evalraw', target, 'Target.closeTarget', JSON.stringify({targetId: target})], {
+      spawnSync('curl', ['-s', '-m', '2', `http://localhost:9222/json/close/${target}`], {
         encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe']
       });
     } catch {}
