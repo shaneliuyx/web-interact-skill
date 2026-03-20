@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Web page content extraction with automatic fallback chain
 // Usage: node extract.mjs <url> [selector]
-// Strategy: curl fast-path → agent-browser → error
+// Strategy: curl fast-path → agent-browser (no TLS skip) → curl -k retry → error
 
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 
 const url = process.argv[2];
 const selector = process.argv[3];
@@ -12,6 +12,23 @@ if (!url) {
   console.error('Usage: extract.mjs <url> [css-selector]');
   process.exit(1);
 }
+
+// Validate URL to prevent command injection
+function validateUrl(u) {
+  try {
+    const parsed = new URL(u);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      console.error('Only http/https URLs are supported');
+      process.exit(1);
+    }
+    return parsed.href;
+  } catch {
+    console.error('Invalid URL:', u);
+    process.exit(1);
+  }
+}
+
+const safeUrl = validateUrl(url);
 
 function evalJS(code) {
   const b64 = Buffer.from(code).toString('base64');
@@ -23,13 +40,21 @@ function evalJS(code) {
 }
 
 // Strategy 1: Try curl fast-path (1-2s, no browser)
-function tryCurl() {
+// skipTls=true only used as fallback after cert error
+function tryCurl(skipTls = false) {
   try {
-    const html = execSync(
-      `curl -sL -m 10 -k -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" "${url}"`,
-      { encoding: 'utf-8', timeout: 15000, maxBuffer: 5 * 1024 * 1024 }
-    );
+    const args = ['curl', '-sL', '-m', '10',
+      '-H', 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'];
+    if (skipTls) args.push('-k');
+    args.push(safeUrl);
 
+    const result = spawnSync(args[0], args.slice(1), {
+      encoding: 'utf-8',
+      timeout: 15000,
+      maxBuffer: 5 * 1024 * 1024
+    });
+
+    const html = result.stdout;
     if (!html || html.length < 50) return null;
 
     // Check for bot detection / challenge pages
@@ -50,7 +75,7 @@ function tryCurl() {
 
     // Extract main content (rough heuristic)
     const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-    if (!bodyMatch) return html.substring(0, 5000);
+    if (!bodyMatch) return (title ? `# ${title}\n\n` : '') + html.substring(0, 5000);
 
     let body = bodyMatch[1];
     // Strip scripts, styles, nav, footer
@@ -61,7 +86,7 @@ function tryCurl() {
     body = body.replace(/\s+/g, ' ').trim();
 
     if (body.length > 100) {
-      return body.substring(0, 10000);
+      return (title ? `# ${title}\n\n` : '') + body.substring(0, 10000);
     }
     return null; // Too little content — try browser
   } catch {
@@ -72,7 +97,8 @@ function tryCurl() {
 // Strategy 2: Browser-based extraction
 function tryBrowser() {
   try {
-    execSync(`agent-browser open "${url}"`, { stdio: 'pipe' });
+    // Use spawnSync to avoid shell injection with URL
+    spawnSync('agent-browser', ['open', safeUrl], { stdio: 'pipe' });
 
     // Robust wait: load event + settle delay (no networkidle — hangs on heavy sites)
     try {
@@ -82,9 +108,12 @@ function tryBrowser() {
 
     let jsCode;
     if (selector) {
+      // Use JSON.stringify for both querySelector arg AND error message to prevent injection
+      const safeSelector = JSON.stringify(selector);
       jsCode = `(() => {
-        const el = document.querySelector(${JSON.stringify(selector)});
-        if (!el) return 'SELECTOR_NOT_FOUND: ${selector}';
+        const sel = ${safeSelector};
+        const el = document.querySelector(sel);
+        if (!el) return 'SELECTOR_NOT_FOUND: ' + sel;
         return el.innerText;
       })()`;
     } else {
@@ -109,7 +138,7 @@ function tryBrowser() {
 }
 
 // Execute fallback chain
-const curlResult = tryCurl();
+const curlResult = tryCurl(false);
 if (curlResult) {
   console.log(curlResult);
   process.exit(0);
@@ -121,5 +150,13 @@ if (browserResult) {
   process.exit(0);
 }
 
-console.error('All extraction methods failed for:', url);
+// Last resort: retry curl with TLS verification disabled (for self-signed certs)
+const curlInsecure = tryCurl(true);
+if (curlInsecure) {
+  console.error('Warning: TLS verification skipped for', safeUrl);
+  console.log(curlInsecure);
+  process.exit(0);
+}
+
+console.error('All extraction methods failed for:', safeUrl);
 process.exit(1);

@@ -6,7 +6,17 @@ allowed-tools:
   - Bash(npx agent-browser:*)
   - Bash(*cdp.mjs*)
   - Bash(curl:*)
+  - Bash(node*extract.mjs*)
   - Read
+  - mcp__ghost-os__ghost_context
+  - mcp__ghost-os__ghost_find
+  - mcp__ghost-os__ghost_click
+  - mcp__ghost-os__ghost_type
+  - mcp__ghost-os__ghost_press
+  - mcp__ghost-os__ghost_wait
+  - mcp__ghost-os__ghost_read
+  - mcp__ghost-os__ghost_ground
+  - mcp__ghost-os__ghost_screenshot
 ---
 
 # Web Interact
@@ -21,8 +31,8 @@ allowed-tools:
 ## Fast Path: curl + defuddle (try first for read-only extraction)
 
 ```bash
-# Quick content grab — no browser needed
-curl -sL -m 10 -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" "<url>" | head -c 50000
+# Quick content grab — no browser needed (quote URLs with & or special chars)
+curl -sL -m 10 -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" '<url>' | head -c 50000
 ```
 
 If curl returns useful HTML, extract with JS-free methods. Skip browser entirely.
@@ -55,6 +65,8 @@ agent-browser get html @e5                       # HTML of specific ref
 ```
 
 After ANY navigation, always re-snapshot: `agent-browser snapshot -i`
+
+When done, close the browser: `agent-browser close`
 
 ## Workflow B: chrome-cdp (existing login session)
 
