@@ -87,9 +87,13 @@ function tryCurl(skipTls = false) {
       return html.substring(0, 10000);
     }
 
-    // Extract title
+    // Extract title (decode common HTML entities)
     const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-    const title = titleMatch ? titleMatch[1].trim() : '';
+    const title = titleMatch ? titleMatch[1].trim()
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&#x27;/g, "'")
+      .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)))
+      : '';
 
     // Extract main content (rough heuristic)
     const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);

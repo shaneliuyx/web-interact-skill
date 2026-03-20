@@ -55,6 +55,35 @@ const TEST_CASES = [
   { url: 'https://raw.githubusercontent.com/anthropics/anthropic-sdk-python/main/README.md', expect: 'Anthropic', name: 'github-raw' },
   // API docs (usually heavy JS)
   { url: 'https://docs.github.com/en/rest', expect: 'REST API', name: 'github-docs' },
+  // --- ROUND 4: Edge cases & real-world ---
+  // Delayed response (2s delay — tests timeout handling)
+  { url: 'https://httpbin.org/delay/2', expect: 'origin', name: 'delayed-response' },
+  // Base64 decoded content
+  { url: 'https://httpbin.org/base64/SFRUUEJJTiBpcyBhd2Vzb21l', expect: 'HTTPBIN is awesome', name: 'base64-content' },
+  // Python.org (well-structured, semantic HTML with article/main)
+  { url: 'https://www.python.org', expect: 'Python', name: 'python-org' },
+  // Arxiv abstract page (academic paper, server-rendered)
+  { url: 'https://arxiv.org/abs/2301.00234', expect: 'arXiv', name: 'arxiv-paper' },
+  // httpbin deny (plain text "denied" page)
+  { url: 'https://httpbin.org/deny', expect: 'YOU SHOULDN', name: 'deny-page' },
+  // CSS selector on a real page
+  { url: 'https://news.ycombinator.com', expect: 'Hacker News', name: 'hn-selector', selector: '.hnname' },
+  // --- ROUND 5: More challenging sites ---
+  // NPM registry API (JSON)
+  { url: 'https://registry.npmjs.org/express/latest', expect: 'express', name: 'npm-api' },
+  // Cloudflare blog (CDN-served, complex layout)
+  { url: 'https://blog.cloudflare.com', expect: 'Cloudflare', name: 'cf-blog' },
+  // Rust lang homepage (well-structured)
+  { url: 'https://www.rust-lang.org', expect: 'Rust', name: 'rust-lang' },
+  // IANA protocol assignments (plain structured HTML)
+  { url: 'https://www.iana.org/assignments/http-status-codes/http-status-codes.xhtml', expect: 'HTTP Status', name: 'iana-status' },
+  // --- ROUND 6: Edge cases for extraction quality ---
+  // Page with HTML entities in title (tests entity decoding)
+  { url: 'https://en.wikipedia.org/wiki/AT%26T', expect: 'AT&T', name: 'html-entity-title' },
+  // Very short page (minimal HTML)
+  { url: 'https://httpbin.org/ip', expect: 'origin', name: 'ip-json' },
+  // Headers-only JSON
+  { url: 'https://httpbin.org/headers', expect: 'User-Agent', name: 'headers-json' },
 ];
 
 let passed = 0;
@@ -76,7 +105,7 @@ for (const tc of TEST_CASES) {
 
     const elapsed = Date.now() - start;
     const hasExpected = tc.expect === '' || output.toLowerCase().includes(tc.expect.toLowerCase());
-    const hasContent = output.length > 20;
+    const hasContent = output.length > 10; // lowered from 20 — some valid responses are short (base64, deny)
 
     if (tc.expectFail) {
       // For expected failures (404, etc.), passing = script exits non-zero (caught below)
