@@ -1,0 +1,21 @@
+question,ground_truth,category,url,selector
+"What is the title of the page at https://example.com?","Example Domain",static,https://example.com,
+"Extract the main heading from https://info.cern.ch, the first website ever made","http://info.cern.ch - home of the first website",static,https://info.cern.ch,
+"What is the top story title on Hacker News right now? Just give the first headline text.","DYNAMIC_CHECK",dynamic,https://news.ycombinator.com,.titleline > a
+"How many stories are shown on the Hacker News front page?","30",dynamic,https://news.ycombinator.com,.athing
+"Extract the description meta tag content from https://github.com/anthropics/claude-code","CONTAINS:CLI tool",metadata,https://github.com/anthropics/claude-code,meta[name=description]
+"What is the HTTP status code text shown on https://httpstat.us/200?","200 OK",static,https://httpstat.us/200,
+"Extract all heading texts from https://example.com","Example Domain",static,https://example.com,h1
+"What programming language is the EvoSkill repository primarily written in? Check https://github.com/sentient-agi/EvoSkill","Python",dynamic,https://github.com/sentient-agi/EvoSkill,
+"Extract the license type from https://github.com/anthropics/claude-code","CONTAINS:Apache",metadata,https://github.com/anthropics/claude-code,
+"What is the page title of https://news.ycombinator.com?","Hacker News",static,https://news.ycombinator.com,title
+"How many navigation links are in the top bar of Hacker News?","RANGE:6-9",dynamic,https://news.ycombinator.com,.pagetop a
+"Extract the domain name displayed on https://example.com","example.com",static,https://example.com,
+"What organization maintains the first website at info.cern.ch?","CONTAINS:CERN",static,https://info.cern.ch,
+"What is the text of the 'More information...' link on example.com?","More information...",static,https://example.com,a
+"Extract the footer text from Hacker News","CONTAINS:Guidelines",dynamic,https://news.ycombinator.com,.yclinks
+"What is the second navigation link text on Hacker News after 'Hacker News'?","new",dynamic,https://news.ycombinator.com,.pagetop a:nth-child(2)
+"Does https://example.com use HTTPS? Check if the page loads.","yes",static,https://example.com,
+"What CSS framework or style approach does example.com use? Check the page source.","CONTAINS:inline",metadata,https://example.com,style
+"Extract the first paragraph text from https://example.com","This domain is for use in illustrative examples in documents.",static,https://example.com,p
+"What is the link destination (href) of the 'More information...' link on example.com?","CONTAINS:iana.org",metadata,https://example.com,a[href]
