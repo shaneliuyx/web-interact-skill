@@ -4,7 +4,8 @@
 // Strategy: curl fast-path → agent-browser (no TLS skip) → curl -k retry → error
 
 import { execSync, spawnSync } from 'child_process';
-import { join } from 'path';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 
 const url = process.argv[2];
 const selector = process.argv[3];
@@ -169,9 +170,7 @@ function tryBrowser() {
 
 // Strategy 3: chrome-cdp (real Chrome session — bypasses bot detection)
 function tryCdp() {
-  const cdpScript = join(process.env.HOME || '', '.claude/skills/chrome-cdp/scripts/cdp.mjs');
-
-  // cdp.mjs requires Node 22+ (built-in WebSocket). Find it.
+  // cdp-eval.mjs requires Node 22+ (built-in WebSocket). Find it.
   const node22Paths = [
     '/opt/homebrew/opt/node@22/bin/node',
     '/usr/local/opt/node@22/bin/node',
@@ -201,7 +200,7 @@ function tryCdp() {
     }
 
     // Open new tab via HTTP API and navigate to URL
-    const newTabResult = spawnSync('curl', ['-s', '-m', '5', `http://localhost:9222/json/new?${encodeURIComponent(safeUrl)}`], {
+    const newTabResult = spawnSync('curl', ['-s', '-X', 'PUT', '-m', '5', `http://localhost:9222/json/new?${encodeURIComponent(safeUrl)}`], {
       encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe']
     });
     if (newTabResult.status !== 0) return null;
@@ -211,12 +210,10 @@ function tryCdp() {
     const target = tabInfo.id;
     if (!target) return null;
 
-    // Wait for page load via cdp.mjs nav (uses WebSocket per-tab, which works)
-    spawnSync(node22, [cdpScript, 'nav', target.substring(0, 4), safeUrl], {
-      encoding: 'utf-8', timeout: 30000, stdio: ['pipe', 'pipe', 'pipe']
-    });
+    // Get WebSocket URL for this tab (already in /json/new response)
+    const wsUrl = tabInfo.webSocketDebuggerUrl || `ws://localhost:9222/devtools/page/${target}`;
 
-    // Try eval extraction first
+    // Build JS expression for content extraction
     let jsExpr;
     if (selector) {
       jsExpr = `(() => { const el = document.querySelector(${JSON.stringify(selector)}); return el ? document.title + '\\n\\n' + el.innerText : null; })()`;
@@ -224,15 +221,15 @@ function tryCdp() {
       jsExpr = `(() => { const sels = ['article','main','[role=main]','.content','#content']; for (const s of sels) { const el = document.querySelector(s); if (el && el.innerText.trim().length > 100) return document.title + '\\n\\n' + el.innerText.trim(); } const c = document.body.cloneNode(true); c.querySelectorAll('nav,footer,header,script,style,noscript').forEach(e=>e.remove()); return document.title + '\\n\\n' + c.innerText.trim(); })()`;
     }
 
-    const targetPrefix = target.substring(0, 4);
-    const evalResult = spawnSync(node22, [cdpScript, 'eval', targetPrefix, jsExpr], {
+    const cdpEvalScript = join(dirname(fileURLToPath(import.meta.url)), 'cdp-eval.mjs');
+    const evalResult = spawnSync(node22, [cdpEvalScript, wsUrl, jsExpr, '5000'], {
       encoding: 'utf-8', timeout: 15000, maxBuffer: 10 * 1024 * 1024,
       stdio: ['pipe', 'pipe', 'pipe']
     });
 
     // Close the tab we opened via HTTP API
     try {
-      spawnSync('curl', ['-s', '-m', '2', `http://localhost:9222/json/close/${target}`], {
+      spawnSync('curl', ['-s', '-X', 'PUT', '-m', '2', `http://localhost:9222/json/close/${target}`], {
         encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe']
       });
     } catch {}
@@ -244,18 +241,6 @@ function tryCdp() {
       if (botPatterns.some(p => content.toLowerCase().includes(p))) return null;
       console.error('Extracted via chrome-cdp (real Chrome session)');
       return content;
-    }
-
-    // Fallback: try html command
-    const htmlArgs = selector ? [cdpScript, 'html', target, selector] : [cdpScript, 'html', target];
-    const htmlResult = spawnSync(node22, htmlArgs, {
-      encoding: 'utf-8', timeout: 15000, maxBuffer: 10 * 1024 * 1024,
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-
-    if (htmlResult.status === 0 && htmlResult.stdout.trim().length > 20) {
-      console.error('Extracted via chrome-cdp html');
-      return htmlResult.stdout.trim().substring(0, 10000);
     }
 
     return null;
