@@ -21,12 +21,15 @@ allowed-tools:
 
 # Web Interact
 
-## Strategy: Fast-Path First, Escalate on Failure
+## Strategy: 5-Tier Automatic Escalation
 
-**1. Try WebFetch/curl first** (fastest, 1-2s) — works for static content, APIs, simple HTML.
-**2. If blocked/empty → agent-browser** (5-15s) — JS rendering, SPAs, interaction.
-**3. If bot-detected → chrome-cdp** (instant) — uses your real Chrome session.
-**4. If non-browser → ghost-os** — desktop apps, visual grounding.
+**1. curl fast-path** (1-2s) — static content, APIs, JSON, XML, plain text.
+**2. agent-browser** (5-15s) — JS rendering, SPAs, form interaction.
+**3. chrome-cdp** (3-10s) — real Chrome session, bypasses bot detection. Auto-tried by `extract.mjs`.
+**4. curl -k** (1-2s) — last-resort TLS skip for self-signed certs.
+**5. ghost-os** (manual) — desktop apps, CAPTCHA, visual grounding. Script outputs `ESCALATE` message; Claude handles via MCP tools.
+
+The helper script `extract.mjs` runs tiers 1-4 automatically. Tier 5 requires Claude to use ghost-os MCP tools directly.
 
 ## Fast Path: curl + defuddle (try first for read-only extraction)
 

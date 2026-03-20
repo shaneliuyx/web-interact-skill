@@ -166,20 +166,106 @@ function tryBrowser() {
   }
 }
 
+// Strategy 3: chrome-cdp (real Chrome session — bypasses bot detection)
+function tryCdp() {
+  const cdpScript = join(process.env.HOME || '', '.claude/skills/chrome-cdp/scripts/cdp.mjs');
+
+  try {
+    // Check if Chrome is running with debugging
+    const listResult = spawnSync('node', [cdpScript, 'list'], {
+      encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe']
+    });
+    if (listResult.status !== 0 || !listResult.stdout.trim()) {
+      return null; // Chrome not running or no debugging
+    }
+
+    // Open a new tab and navigate
+    const openResult = spawnSync('node', [cdpScript, 'open', safeUrl], {
+      encoding: 'utf-8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe']
+    });
+    if (openResult.status !== 0) return null;
+
+    // Extract target ID from open output (usually the last line has the target prefix)
+    const openOutput = openResult.stdout.trim();
+    const targetMatch = openOutput.match(/([A-F0-9]{4,})/i);
+    if (!targetMatch) return null;
+    const target = targetMatch[1];
+
+    // Wait for page load
+    spawnSync('node', [cdpScript, 'nav', target, safeUrl], {
+      encoding: 'utf-8', timeout: 30000, stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    // Try eval extraction first
+    let jsExpr;
+    if (selector) {
+      jsExpr = `(() => { const el = document.querySelector(${JSON.stringify(selector)}); return el ? document.title + '\\n\\n' + el.innerText : null; })()`;
+    } else {
+      jsExpr = `(() => { const sels = ['article','main','[role=main]','.content','#content']; for (const s of sels) { const el = document.querySelector(s); if (el && el.innerText.trim().length > 100) return document.title + '\\n\\n' + el.innerText.trim(); } const c = document.body.cloneNode(true); c.querySelectorAll('nav,footer,header,script,style,noscript').forEach(e=>e.remove()); return document.title + '\\n\\n' + c.innerText.trim(); })()`;
+    }
+
+    const evalResult = spawnSync('node', [cdpScript, 'eval', target, jsExpr], {
+      encoding: 'utf-8', timeout: 15000, maxBuffer: 10 * 1024 * 1024,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    // Close the tab we opened
+    try {
+      spawnSync('node', [cdpScript, 'evalraw', target, 'Target.closeTarget', JSON.stringify({targetId: target})], {
+        encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe']
+      });
+    } catch {}
+
+    if (evalResult.status === 0 && evalResult.stdout.trim().length > 20) {
+      const content = evalResult.stdout.trim();
+      // Check for bot detection in CDP result too
+      const botPatterns = ['verify you are not a bot', 'security verification', 'checking your browser'];
+      if (botPatterns.some(p => content.toLowerCase().includes(p))) return null;
+      console.error('Extracted via chrome-cdp (real Chrome session)');
+      return content;
+    }
+
+    // Fallback: try html command
+    const htmlArgs = selector ? [cdpScript, 'html', target, selector] : [cdpScript, 'html', target];
+    const htmlResult = spawnSync('node', htmlArgs, {
+      encoding: 'utf-8', timeout: 15000, maxBuffer: 10 * 1024 * 1024,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    if (htmlResult.status === 0 && htmlResult.stdout.trim().length > 20) {
+      console.error('Extracted via chrome-cdp html');
+      return htmlResult.stdout.trim().substring(0, 10000);
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // Execute fallback chain
+// Tier 1: curl fast-path
 const curlResult = tryCurl(false);
 if (curlResult) {
   console.log(curlResult);
   process.exit(0);
 }
 
+// Tier 2: headless browser
 const browserResult = tryBrowser();
 if (browserResult) {
   console.log(browserResult);
   process.exit(0);
 }
 
-// Last resort: retry curl with TLS verification disabled (for self-signed certs)
+// Tier 3: chrome-cdp (real Chrome — bypasses bot detection)
+const cdpResult = tryCdp();
+if (cdpResult) {
+  console.log(cdpResult);
+  process.exit(0);
+}
+
+// Tier 4: retry curl with TLS verification disabled (for self-signed certs)
 const curlInsecure = tryCurl(true);
 if (curlInsecure) {
   console.error('Warning: TLS verification skipped for', safeUrl);
@@ -187,5 +273,7 @@ if (curlInsecure) {
   process.exit(0);
 }
 
-console.error('All extraction methods failed for:', safeUrl);
+// All automated methods failed — suggest manual escalation
+console.error(`ESCALATE: All extraction methods failed for ${safeUrl}`);
+console.error('Try: ghost_context(app="Chrome") → ghost_find → ghost_read for desktop/visual extraction');
 process.exit(1);
