@@ -58,8 +58,11 @@ function tryCurl(skipTls = false) {
     if (!html || html.length < 50) return null;
 
     // Check for bot detection / challenge pages
-    if (html.includes('Access Denied') || html.includes('cf-challenge') ||
-        html.includes('Just a moment') || html.includes('captcha')) {
+    const botPatterns = ['Access Denied', 'cf-challenge', 'Just a moment',
+      'captcha', 'security verification', 'checking your browser',
+      'verify you are not a bot', 'please wait while we verify',
+      'Attention Required', 'Enable JavaScript and cookies'];
+    if (botPatterns.some(p => html.toLowerCase().includes(p.toLowerCase()))) {
       return null; // Need browser
     }
 
@@ -144,7 +147,18 @@ function tryBrowser() {
       })()`;
     }
 
-    return evalJS(jsCode);
+    const result = evalJS(jsCode);
+
+    // Check if browser also got a bot challenge page
+    if (result && (result.toLowerCase().includes('verify you are not a bot') ||
+        result.toLowerCase().includes('security verification') ||
+        result.toLowerCase().includes('checking your browser') ||
+        result.toLowerCase().includes('enable javascript and cookies'))) {
+      console.error('BOT_DETECTED: Site requires real browser session. Use chrome-cdp or ghost-os.');
+      return null;
+    }
+
+    return result;
   } catch (err) {
     return null;
   } finally {
