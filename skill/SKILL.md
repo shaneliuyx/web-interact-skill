@@ -108,11 +108,18 @@ $CDP click <target> "button.submit"  # click by CSS selector
 
 ## Workflow D: ghost-os (desktop/visual)
 
-Use MCP tools directly:
-1. `ghost_context(app="Chrome")` → current state
-2. `ghost_find(query="Submit", app="Chrome")` → locate element
-3. `ghost_click(dom_id="...", app="Chrome")` → click (dom_id most reliable)
-4. `ghost_type(text="hello", app="Chrome")` → type text
+**Step 0: Check for existing tab first.**
+Before navigating, use `ghost_context(app="Chrome")` to check the current URL. If the target domain is already open, use that tab. If not, check other tabs:
+1. `ghost_context(app="Chrome")` → check current URL
+2. If wrong domain → `ghost_find(query="<domain or page title>", role="AXStaticText", app="Chrome")` to find if any tab has it
+3. If found → click the tab. If not → navigate: `ghost_hotkey(keys=["cmd","l"])` → `ghost_type(text="<url>")` → `ghost_press(key="return")`
+4. `ghost_wait(condition="urlContains", value="<domain>", app="Chrome")` → confirm page loaded
+
+**Then interact:**
+1. `ghost_find(query="Submit", app="Chrome")` → locate element
+2. `ghost_click(dom_id="...", app="Chrome")` → click (dom_id most reliable)
+3. `ghost_type(text="hello", app="Chrome")` → type text
+4. `ghost_read(app="Chrome")` → extract text content
 
 ## Error Recovery (auto-escalate)
 
