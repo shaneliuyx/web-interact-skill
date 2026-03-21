@@ -94,6 +94,51 @@ Expected: 35/35 passed (100%). If agent-browser or Chrome CDP is unavailable, so
 
 The skill auto-activates when you ask to "scrape a page", "get info from website", "extract data from site", etc. Or invoke directly with `/web-interact`.
 
+## Auto-Fallback Setup (Optional)
+
+The web-interact skill can automatically activate when WebFetch fails or returns unusable content. Two mechanisms work together:
+
+### Mechanism 1: Expanded trigger phrases (automatic)
+
+The skill description includes phrases like "study this", "research this URL", "access this link", "check this page", "look at this", "read this article", "open this link", "what's on this page", "get content from this URL", and "visit this site". Claude will automatically route these to web-interact without any configuration.
+
+### Mechanism 2: PostToolUse hook (one-time setup)
+
+For true automatic fallback — where web-interact activates silently after WebFetch fails — add the following to your Claude Code `settings.json`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [{
+      "matcher": "WebFetch",
+      "hooks": [{
+        "type": "command",
+        "command": "node ~/.claude/skills/web-interact/scripts/webfetch-fallback.mjs"
+      }]
+    }]
+  }
+}
+```
+
+The hook script (`webfetch-fallback.mjs`) inspects every WebFetch result and detects:
+
+- **Empty/minimal content** — response shorter than 100 characters
+- **Blocked responses** — contains patterns like `403 forbidden`, `cloudflare ray id`, `just a moment`, `login required`, `authentication required`, etc.
+
+When a failure is detected, the hook outputs a suggestion to use web-interact with CDP (real Chrome session) or headless browser instead.
+
+### Why this matters
+
+WebFetch cannot access pages that require authentication. With this hook, Claude will automatically suggest using chrome-cdp (which connects to your real Chrome session with all your logins) when WebFetch encounters:
+
+- **X/Twitter** — login wall
+- **Gmail / Google** — authentication required
+- **LinkedIn** — sign-in gate
+- **Paywalled sites** — subscription required
+- **Bot-protected pages** — Cloudflare challenge, CAPTCHA
+
+No manual intervention needed — Claude detects the failure and switches to the appropriate tier automatically.
+
 ## Prerequisites Summary
 
 | Tool | Required | Tier | Install |
