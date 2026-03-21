@@ -15,6 +15,8 @@ cp "$SCRIPT_DIR/skill/SKILL.md" "$SKILL_DIR/"
 cp "$SCRIPT_DIR/skill/REFERENCE.md" "$SKILL_DIR/"
 cp "$SCRIPT_DIR/skill/scripts/extract.mjs" "$SKILL_DIR/scripts/"
 chmod +x "$SKILL_DIR/scripts/extract.mjs"
+cp "$SCRIPT_DIR/skill/scripts/cdp-eval.mjs" "$SKILL_DIR/scripts/"
+chmod +x "$SKILL_DIR/scripts/cdp-eval.mjs"
 
 echo "Skill installed to $SKILL_DIR"
 

@@ -7,6 +7,8 @@ import { execSync, spawnSync } from 'child_process';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
+const BOT_PATTERNS = ['cf-challenge', 'just a moment', 'checking your browser', 'captcha', 'cloudflare', 'bot protection', 'access denied'];
+
 const url = process.argv[2];
 const selector = process.argv[3];
 
@@ -31,6 +33,13 @@ function validateUrl(u) {
 }
 
 const safeUrl = validateUrl(url);
+
+function buildContentJS(selector) {
+  if (selector) {
+    return `JSON.stringify([...document.querySelectorAll(${JSON.stringify(selector)})].map(el => el.innerText || el.textContent).filter(Boolean))`;
+  }
+  return `(function(){const s=['article','main','[role="main"]','.content','#content'];for(const q of s){const el=document.querySelector(q);if(el&&el.innerText.trim().length>100)return el.innerText.trim();}return document.body?document.body.innerText.trim():'';})()`;
+}
 
 function evalJS(code) {
   const b64 = Buffer.from(code).toString('base64');
@@ -60,11 +69,7 @@ function tryCurl(skipTls = false) {
     if (!html || html.length < 50) return null;
 
     // Check for bot detection / challenge pages
-    const botPatterns = ['Access Denied', 'cf-challenge', 'Just a moment',
-      'captcha', 'security verification', 'checking your browser',
-      'verify you are not a bot', 'please wait while we verify',
-      'Attention Required', 'Enable JavaScript and cookies'];
-    if (botPatterns.some(p => html.toLowerCase().includes(p.toLowerCase()))) {
+    if (BOT_PATTERNS.some(p => html.toLowerCase().includes(p))) {
       return null; // Need browser
     }
 
@@ -128,38 +133,10 @@ function tryBrowser() {
     } catch {}
     execSync(`agent-browser wait 2000`, { stdio: 'pipe' });
 
-    let jsCode;
-    if (selector) {
-      // Use JSON.stringify for both querySelector arg AND error message to prevent injection
-      const safeSelector = JSON.stringify(selector);
-      jsCode = `(() => {
-        const sel = ${safeSelector};
-        const el = document.querySelector(sel);
-        if (!el) return 'SELECTOR_NOT_FOUND: ' + sel;
-        const title = document.title || '';
-        const text = el.innerText.trim();
-        return (title ? '# ' + title + '\\n\\n' : '') + '[' + sel + '] ' + text;
-      })()`;
-    } else {
-      jsCode = `(() => {
-        const selectors = ['article', 'main', '[role="main"]', '.content', '#content', '.post-content', '.entry-content'];
-        for (const sel of selectors) {
-          const el = document.querySelector(sel);
-          if (el && el.innerText.trim().length > 100) return el.innerText.trim();
-        }
-        const clone = document.body.cloneNode(true);
-        clone.querySelectorAll('nav, footer, header, script, style, noscript').forEach(el => el.remove());
-        return clone.innerText.trim();
-      })()`;
-    }
-
-    const result = evalJS(jsCode);
+    const result = evalJS(buildContentJS(selector));
 
     // Check if browser also got a bot challenge page
-    if (result && (result.toLowerCase().includes('verify you are not a bot') ||
-        result.toLowerCase().includes('security verification') ||
-        result.toLowerCase().includes('checking your browser') ||
-        result.toLowerCase().includes('enable javascript and cookies'))) {
+    if (result && BOT_PATTERNS.some(p => result.toLowerCase().includes(p))) {
       console.error('BOT_DETECTED: Site requires real browser session. Use chrome-cdp or ghost-os.');
       return null;
     }
@@ -175,23 +152,21 @@ function tryBrowser() {
 // Strategy 3: chrome-cdp (real Chrome session — bypasses bot detection)
 function tryCdp() {
   // cdp-eval.mjs requires Node 22+ (built-in WebSocket). Find it.
-  const node22Paths = [
-    '/opt/homebrew/opt/node@22/bin/node',
-    '/usr/local/opt/node@22/bin/node',
-    '/usr/local/bin/node22',
-  ];
-  let node22 = null;
-  for (const p of node22Paths) {
-    try {
-      const v = spawnSync(p, ['--version'], { encoding: 'utf-8', timeout: 3000 });
-      if (v.status === 0 && parseInt(v.stdout.trim().replace('v','')) >= 22) { node22 = p; break; }
-    } catch {}
+  function findNode22() {
+    const candidates = [
+      '/opt/homebrew/opt/node@22/bin/node',
+      '/usr/local/opt/node@22/bin/node',
+      '/usr/local/bin/node22',
+      process.execPath,
+    ];
+    return candidates.find(p => {
+      try {
+        const v = spawnSync(p, ['--version'], { encoding: 'utf-8', timeout: 3000 });
+        return v.status === 0 && parseInt(v.stdout.trim().replace('v', '')) >= 22;
+      } catch { return false; }
+    }) ?? null;
   }
-  // Fallback: check if default node is 22+
-  if (!node22) {
-    const major = parseInt(process.versions.node);
-    if (major >= 22) node22 = process.execPath;
-  }
+  const node22 = findNode22();
   if (!node22) return null; // No Node 22 available, skip cdp tier
 
   try {
@@ -218,12 +193,7 @@ function tryCdp() {
     const wsUrl = tabInfo.webSocketDebuggerUrl || `ws://localhost:9222/devtools/page/${target}`;
 
     // Build JS expression for content extraction
-    let jsExpr;
-    if (selector) {
-      jsExpr = `(() => { const el = document.querySelector(${JSON.stringify(selector)}); return el ? document.title + '\\n\\n' + el.innerText : null; })()`;
-    } else {
-      jsExpr = `(() => { const sels = ['article','main','[role=main]','.content','#content']; for (const s of sels) { const el = document.querySelector(s); if (el && el.innerText.trim().length > 100) return document.title + '\\n\\n' + el.innerText.trim(); } const c = document.body.cloneNode(true); c.querySelectorAll('nav,footer,header,script,style,noscript').forEach(e=>e.remove()); return document.title + '\\n\\n' + c.innerText.trim(); })()`;
-    }
+    const jsExpr = buildContentJS(selector);
 
     const cdpEvalScript = join(dirname(fileURLToPath(import.meta.url)), 'cdp-eval.mjs');
     const evalResult = spawnSync(node22, [cdpEvalScript, wsUrl, jsExpr, '5000'], {
@@ -241,8 +211,7 @@ function tryCdp() {
     if (evalResult.status === 0 && evalResult.stdout.trim().length > 20) {
       const content = evalResult.stdout.trim();
       // Check for bot detection in CDP result too
-      const botPatterns = ['verify you are not a bot', 'security verification', 'checking your browser'];
-      if (botPatterns.some(p => content.toLowerCase().includes(p))) return null;
+      if (BOT_PATTERNS.some(p => content.toLowerCase().includes(p))) return null;
       console.error('Extracted via chrome-cdp (real Chrome session)');
       return content;
     }
@@ -254,33 +223,15 @@ function tryCdp() {
 }
 
 // Execute fallback chain
-// Tier 1: curl fast-path
-const curlResult = tryCurl(false);
-if (curlResult) {
-  console.log(curlResult);
-  process.exit(0);
-}
-
-// Tier 2: headless browser
-const browserResult = tryBrowser();
-if (browserResult) {
-  console.log(browserResult);
-  process.exit(0);
-}
-
-// Tier 3: chrome-cdp (real Chrome — bypasses bot detection)
-const cdpResult = tryCdp();
-if (cdpResult) {
-  console.log(cdpResult);
-  process.exit(0);
-}
-
-// Tier 4: retry curl with TLS verification disabled (for self-signed certs)
-const curlInsecure = tryCurl(true);
-if (curlInsecure) {
-  console.error('Warning: TLS verification skipped for', safeUrl);
-  console.log(curlInsecure);
-  process.exit(0);
+const strategies = [
+  () => tryCurl(false),
+  () => tryBrowser(),
+  () => tryCdp(),
+  () => { const r = tryCurl(true); if (r) console.error('Warning: TLS verification skipped for', safeUrl); return r; },
+];
+for (const fn of strategies) {
+  const result = fn();
+  if (result) { console.log(result); process.exit(0); }
 }
 
 // All automated methods failed — suggest manual escalation

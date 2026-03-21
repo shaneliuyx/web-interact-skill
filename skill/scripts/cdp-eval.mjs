@@ -25,7 +25,7 @@ async function main() {
   const result = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       ws.close();
-      reject(new Error('Timeout: no response within 20 seconds'));
+      reject(new Error(`Timeout: no response within ${TIMEOUT_MS / 1000} seconds`));
     }, TIMEOUT_MS);
 
     ws.addEventListener('error', (ev) => {
@@ -33,12 +33,13 @@ async function main() {
       reject(new Error(`WebSocket error: ${ev.message ?? 'connection failed'}`));
     });
 
-    ws.addEventListener('open', () => {
-      send(ws, 'Page.enable');
-    });
-
     let evalId = null;
     let evalScheduled = false;
+    let pageEnableId = null;
+
+    ws.addEventListener('open', () => {
+      pageEnableId = send(ws, 'Page.enable');
+    });
 
     const scheduleEval = () => {
       if (evalScheduled) return;
@@ -54,7 +55,7 @@ async function main() {
       try { msg = JSON.parse(ev.data); } catch { return; }
 
       // Page.enable ack — set fallback in case loadEventFired never fires
-      if (msg.id === 1) {
+      if (msg.id === pageEnableId) {
         setTimeout(scheduleEval, waitMs + 1000).unref();
       }
 
@@ -81,8 +82,8 @@ async function main() {
   // Output strings directly (no JSON wrapping) for seamless piping
   if (typeof result === 'string') {
     console.log(result);
-  } else {
-    console.log(result === undefined ? '' : JSON.stringify(result, null, 2));
+  } else if (result !== undefined) {
+    console.log(JSON.stringify(result, null, 2));
   }
 }
 

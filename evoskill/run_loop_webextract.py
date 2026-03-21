@@ -14,27 +14,8 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.api import EvoSkill, TaskConfig, register_task
-from src.agent_profiles.webextract_agent import make_webextract_agent_options
-from src.evaluation.webextract_scorer import score_webextract
-
-
-def _webextract_scorer_wrapper(question: str, predicted: str, ground_truth: str) -> float:
-    """Wrapper matching EvoSkill's (question, predicted, ground_truth) signature."""
-    return score_webextract(question, ground_truth, predicted)
-
-
-def register_webextract_task():
-    """Register the web extraction task."""
-    register_task(TaskConfig(
-        name="webextract",
-        make_agent_options=make_webextract_agent_options,
-        scorer=_webextract_scorer_wrapper,
-        question_col="question",
-        answer_col="ground_truth",
-        category_col="category",
-        default_dataset=".dataset/webextract_benchmark.csv",
-    ))
+from src.api import EvoSkill
+from evoskill.webextract_task import register_webextract_task
 
 
 async def main():

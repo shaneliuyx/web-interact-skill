@@ -6,6 +6,7 @@ Supports three answer types:
 - RANGE:min-max — predicted must contain a number in range
 - DYNAMIC_CHECK — always scores 1.0 if non-empty (for dynamic content)
 """
+import re
 
 
 def score_webextract(question: str, ground_truth: str, predicted: str) -> float:
@@ -41,7 +42,6 @@ def score_webextract(question: str, ground_truth: str, predicted: str) -> float:
             low, high = range_str.split("-")
             low, high = int(low), int(high)
             # Extract numbers from predicted
-            import re
             numbers = re.findall(r'\d+', predicted)
             if numbers:
                 val = int(numbers[0])
