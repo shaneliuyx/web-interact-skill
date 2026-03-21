@@ -13,24 +13,97 @@ Unified web page interaction skill for Claude Code. Automatically extracts conte
 - **35 diverse test cases**: static HTML, JSON APIs, XML, redirects, selectors, UTF-8, Wikipedia, GitHub, HN, StackOverflow, MDN, arxiv, and more
 - **Chrome CDP with inline WebSocket eval**: `cdp-eval.mjs` uses Node 22 built-in WebSocket for zero-dependency CDP evaluation
 
-## Quick Install
+## Installation
+
+### Step 1: Clone the repository
 
 ```bash
-git clone <repo-url> ~/Documents/web-interact-skill
+git clone https://github.com/shaneliuyx/web-interact-skill.git ~/Documents/web-interact-skill
 cd ~/Documents/web-interact-skill
+```
+
+### Step 2: Install required dependencies
+
+```bash
+# Node.js 18+ (required for extract.mjs and agent-browser)
+brew install node
+
+# agent-browser — headless Playwright automation for Claude Code (required)
+npm i -g agent-browser
+
+# Install Playwright's Chromium headless shell (required by agent-browser)
+# IMPORTANT: Use the same playwright-core version that agent-browser depends on.
+# Check with: npm list playwright-core -g
+# Then install matching browser:
+npx playwright-core@$(npm list playwright-core -g --json 2>/dev/null | python3 -c "import sys,json;d=json.load(sys.stdin);print([v for k,v in d.get('dependencies',{}).items() if 'agent-browser' in k][0]['dependencies']['playwright-core']['version'])" 2>/dev/null || echo "latest") install chromium
+```
+
+### Step 3: Install optional dependencies
+
+```bash
+# browser-use — autonomous AI browser agent for multi-step tasks (optional, Tier 2.5)
+uv tool install browser-use
+browser-use install  # downloads its own Chromium
+
+# Node.js 22+ — required for chrome-cdp tier (built-in WebSocket)
+brew install node@22
+# Verify: /opt/homebrew/opt/node@22/bin/node --version
+
+# ghost-os — desktop GUI automation via MCP (optional, Tier 5)
+# See: https://github.com/anthropics/ghost-os
+```
+
+### Step 4: Run the installer
+
+```bash
 bash install.sh
 ```
 
-## Prerequisites
+This copies skill files to `~/.claude/skills/web-interact/`:
+- `SKILL.md` — main skill instructions (loaded by Claude Code)
+- `REFERENCE.md` — advanced patterns reference
+- `scripts/extract.mjs` — one-command extraction with automatic fallback
+- `scripts/cdp-eval.mjs` — CDP WebSocket eval helper (Node 22+)
 
-| Tool | Required | Install |
-|------|----------|---------|
-| agent-browser | Yes | `npm i -g agent-browser` |
-| browser-use | Optional | `uv tool install browser-use && browser-use install` |
-| ghost-os | Optional | `brew install ghost-os` |
-| chrome-cdp | Optional | Already included if you have the chrome-cdp skill |
-| Node.js 18+ | Yes | `brew install node` |
-| Node.js 22+ | Optional, for chrome-cdp tier | `brew install node` (update to 22+) |
+The installer also checks all dependencies and reports their status.
+
+### Step 5: Enable Chrome CDP (optional)
+
+To use the chrome-cdp tier (Tier 3), launch Chrome with remote debugging enabled:
+
+```bash
+# macOS
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
+```
+
+Or add `--remote-debugging-port=9222` to your Chrome shortcut. The CDP tier uses your real Chrome session (with all your logged-in cookies), which bypasses bot detection that blocks headless browsers.
+
+### Step 6: Verify installation
+
+```bash
+# Run the 35-case test suite
+node ~/Documents/web-interact-skill/skill/scripts/test-extract.mjs
+
+# Quick smoke test
+node ~/.claude/skills/web-interact/scripts/extract.mjs https://example.com
+```
+
+Expected: 35/35 passed (100%). If agent-browser or Chrome CDP is unavailable, some tests may fall back to curl or fail gracefully.
+
+### Step 7: Use in Claude Code
+
+The skill auto-activates when you ask to "scrape a page", "get info from website", "extract data from site", etc. Or invoke directly with `/web-interact`.
+
+## Prerequisites Summary
+
+| Tool | Required | Tier | Install |
+|------|----------|------|---------|
+| Node.js 18+ | Yes | All | `brew install node` |
+| agent-browser | Yes | Tier 2 | `npm i -g agent-browser` + Playwright chromium |
+| browser-use | Optional | Tier 2.5 | `uv tool install browser-use && browser-use install` |
+| Node.js 22+ | Optional | Tier 3 | `brew install node@22` (for CDP WebSocket) |
+| Chrome with `--remote-debugging-port=9222` | Optional | Tier 3 | Launch Chrome with flag |
+| ghost-os | Optional | Tier 5 | MCP server (see ghost-os docs) |
 
 ## How It Works
 
