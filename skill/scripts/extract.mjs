@@ -187,18 +187,48 @@ function tryCdp() {
       return null; // Chrome not running with debugging
     }
 
-    // Open new tab via HTTP API and navigate to URL
-    const newTabResult = spawnSync('curl', ['-s', '-X', 'PUT', '-m', '5', `http://localhost:9222/json/new?${encodeURIComponent(safeUrl)}`], {
-      encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe']
+    // Check for an existing tab matching the target domain (preserves auth cookies)
+    const targetDomain = new URL(safeUrl).hostname;
+    const listResult = spawnSync('curl', ['-s', '-m', '2', 'http://localhost:9222/json'], {
+      encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe']
     });
-    if (newTabResult.status !== 0) return null;
+    let existingTab = null;
+    let openedNewTab = false;
+    if (listResult.status === 0) {
+      try {
+        const tabs = JSON.parse(listResult.stdout);
+        existingTab = tabs.find(t => t.url && t.url.includes(targetDomain) && t.type === 'page');
+      } catch {}
+    }
 
     let tabInfo;
-    try { tabInfo = JSON.parse(newTabResult.stdout); } catch { return null; }
+    if (existingTab) {
+      // Reuse existing tab — has cookies/auth from user's session
+      tabInfo = existingTab;
+      console.error(`Reusing existing Chrome tab for ${targetDomain}`);
+      // Navigate to exact URL if different
+      if (!existingTab.url.includes(safeUrl)) {
+        const wsUrl = tabInfo.webSocketDebuggerUrl || `ws://localhost:9222/devtools/page/${tabInfo.id}`;
+        const navJS = `window.location.href = ${JSON.stringify(safeUrl)}`;
+        const cdpEvalScript = join(dirname(fileURLToPath(import.meta.url)), 'cdp-eval.mjs');
+        spawnSync(node22, [cdpEvalScript, wsUrl, navJS, '3000'], {
+          encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe']
+        });
+      }
+    } else {
+      // No existing tab — open new one
+      const newTabResult = spawnSync('curl', ['-s', '-X', 'PUT', '-m', '5', `http://localhost:9222/json/new?${encodeURIComponent(safeUrl)}`], {
+        encoding: 'utf-8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe']
+      });
+      if (newTabResult.status !== 0) return null;
+      try { tabInfo = JSON.parse(newTabResult.stdout); } catch { return null; }
+      openedNewTab = true;
+    }
+
     const target = tabInfo.id;
     if (!target) return null;
 
-    // Get WebSocket URL for this tab (already in /json/new response)
+    // Get WebSocket URL for this tab
     const wsUrl = tabInfo.webSocketDebuggerUrl || `ws://localhost:9222/devtools/page/${target}`;
 
     // Build JS expression for content extraction
@@ -210,18 +240,20 @@ function tryCdp() {
       stdio: ['pipe', 'pipe', 'pipe']
     });
 
-    // Close the tab we opened via HTTP API
-    try {
-      spawnSync('curl', ['-s', '-X', 'PUT', '-m', '2', `http://localhost:9222/json/close/${target}`], {
-        encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe']
-      });
-    } catch {}
+    // Only close tabs we opened (don't close user's existing tabs)
+    if (openedNewTab) {
+      try {
+        spawnSync('curl', ['-s', '-X', 'PUT', '-m', '2', `http://localhost:9222/json/close/${target}`], {
+          encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe']
+        });
+      } catch {}
+    }
 
     if (evalResult.status === 0 && evalResult.stdout.trim().length > 20) {
       const content = evalResult.stdout.trim();
       // Check for bot detection in CDP result too
       if (BOT_PATTERNS.some(p => content.toLowerCase().includes(p))) return null;
-      console.error('Extracted via chrome-cdp (real Chrome session)');
+      console.error(`Extracted via chrome-cdp (${existingTab ? 'existing tab' : 'new tab'})`);
       return content;
     }
 
