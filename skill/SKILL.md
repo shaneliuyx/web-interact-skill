@@ -1,6 +1,6 @@
 ---
 name: web-interact
-description: Unified web page interaction when WebFetch fails. Combines agent-browser (headless Playwright), chrome-cdp (existing Chrome tabs), and ghost-os (desktop GUI/vision). Use when asked to "scrape a page", "get info from website", "fill a form", "click a button", "interact with web page", "automate browser", "extract data from site", or when WebFetch returns empty/blocked content.
+description: Unified web page interaction when WebFetch fails. Combines agent-browser (headless Playwright), browser-use (autonomous AI agent), chrome-cdp (existing Chrome tabs), and ghost-os (desktop GUI/vision). Use when asked to "scrape a page", "get info from website", "grab info from", "read this URL", "fetch content from", "fill a form", "click a button", "interact with web page", "automate browser", "extract data from site", "summarize this page", "what does this link say", or when WebFetch returns empty/blocked content. Handles SPAs (React, Next.js, Vue), login-required pages via CDP, and bot-protected sites.
 allowed-tools:
   - Bash(agent-browser:*)
   - Bash(npx agent-browser:*)

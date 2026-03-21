@@ -102,6 +102,13 @@ function tryCurl(skipTls = false) {
       .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)))
       : '';
 
+    // Detect SPA shell pages (React, Next.js, Vue, Nuxt, Angular) — no real content in HTML
+    const SPA_MARKERS = ['id="react-root"', 'id="__next"', 'id="__nuxt"', 'id="app"', 'id="root"', 'ng-app', 'data-reactroot'];
+    if (SPA_MARKERS.some(m => html.includes(m))) {
+      // SPA detected — curl can't render JS, fall through to browser
+      return null;
+    }
+
     // Extract main content (rough heuristic)
     const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
     if (!bodyMatch) return (title ? `# ${title}\n\n` : '') + html.substring(0, 5000);
