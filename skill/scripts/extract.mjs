@@ -7,7 +7,7 @@ import { execSync, spawnSync } from 'child_process';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
-const BOT_PATTERNS = ['cf-challenge', 'just a moment', 'checking your browser', 'captcha', 'cloudflare', 'bot protection', 'access denied'];
+const BOT_PATTERNS = ['cf-challenge', 'just a moment', 'checking your browser', 'captcha', 'cloudflare ray id', 'bot protection', 'access denied'];
 
 const url = process.argv[2];
 const selector = process.argv[3];
@@ -66,7 +66,22 @@ function tryCurl(skipTls = false) {
     });
 
     const html = result.stdout;
-    if (!html || html.length < 50) return null;
+    if (!html || html.length === 0) return null;
+
+    // Detect non-HTML content (JSON, plain text, XML) — return directly even if short
+    const trimmed = html.trimStart();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      return html.substring(0, 10000);
+    }
+    if (!trimmed.includes('<html') && !trimmed.includes('<HTML') &&
+        !trimmed.includes('<!DOCTYPE') && !trimmed.includes('<!doctype') &&
+        !trimmed.includes('<head') && !trimmed.includes('<body')) {
+      // Plain text or non-HTML — return as-is (no min-length for non-HTML)
+      return html.substring(0, 10000);
+    }
+
+    // HTML responses need minimum content to be useful
+    if (html.length < 50) return null;
 
     // Check for bot detection / challenge pages
     if (BOT_PATTERNS.some(p => html.toLowerCase().includes(p))) {
@@ -77,19 +92,6 @@ function tryCurl(skipTls = false) {
     if (selector) {
       // Can't use CSS selectors without DOM — fall through to browser
       return null;
-    }
-
-    // Detect non-HTML content (JSON, plain text, XML) — return directly
-    const trimmed = html.trimStart();
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-      // JSON response — return as-is (truncated)
-      return html.substring(0, 10000);
-    }
-    if (!trimmed.includes('<html') && !trimmed.includes('<HTML') &&
-        !trimmed.includes('<!DOCTYPE') && !trimmed.includes('<!doctype') &&
-        !trimmed.includes('<head') && !trimmed.includes('<body')) {
-      // Plain text or non-HTML — return as-is
-      return html.substring(0, 10000);
     }
 
     // Extract title (decode common HTML entities)

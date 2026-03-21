@@ -45,7 +45,7 @@ bash install.sh
 
 `extract.mjs` runs tiers 1–4 automatically as a **strategy array loop**: each tier is a function in an array; the loop calls each in order and stops at the first non-empty result. Key internals:
 
-- **`BOT_PATTERNS`** — constant array of strings (`cf-challenge`, `just a moment`, `cloudflare`, etc.) checked against curl and browser output to detect challenge pages before returning content
+- **`BOT_PATTERNS`** — constant array of strings (`cf-challenge`, `just a moment`, `cloudflare ray id`, etc.) checked against curl and browser output to detect challenge pages before returning content
 - **`buildContentJS(selector)`** — helper that builds the JS extraction expression: CSS selector query when a selector is given, or a smart semantic-element priority scan (`article`, `main`, `[role="main"]`, `.content`, `#content`) falling back to `document.body.innerText`
 - **`findNode22()`** — helper that probes candidate paths for a Node.js ≥22 binary (required for built-in WebSocket used by `cdp-eval.mjs`)
 
@@ -201,6 +201,20 @@ Custom scorer supports exact match, CONTAINS:, RANGE:, and DYNAMIC_CHECK pattern
 | `skill/scripts/cdp-eval.mjs` | CDP WebSocket eval helper (Node 22+), copied to skill dir by install.sh |
 | `skill/scripts/test-extract.mjs` | Test harness with 35 diverse URL test cases |
 | `evoskill/webextract_task.py` | Shared task registration module for EvoSkill evaluation scripts |
+
+## Changelog
+
+### v0.6.0 — Browser Use + Code Simplification (2026-03-21)
+
+- **Browser Use CLI 2.0 as Tier 2.5** — autonomous multi-step web tasks (search → click → fill → submit) via `browser-use task "goal"`
+- **6-Tier architecture** — curl → agent-browser → browser-use → chrome-cdp → curl -k → ghost-os
+- **extract.mjs simplified** — BOT_PATTERNS constant (3→1), buildContentJS helper (2→1), findNode22 Array.find, strategy array loop. Net -57 lines.
+- **cdp-eval.mjs hardened** — dynamic timeout, no magic numbers, simplified output
+- **install.sh improved** — copies cdp-eval.mjs, detects uv-installed browser-use
+- **Shared webextract_task.py** — eliminated duplication between eval/loop runners
+- **Test harness hardened** — spawnSync (no shell injection), derived counters, fixed expectFail logic
+- **Bot detection refined** — `cloudflare` → `cloudflare ray id` to avoid false positives on legitimate content
+- **Short response fix** — plain text/JSON responses bypass HTML min-length check
 
 ## License
 
