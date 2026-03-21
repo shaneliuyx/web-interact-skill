@@ -5,7 +5,7 @@ Unified web page interaction skill for Claude Code. Automatically extracts conte
 ## Features
 
 - **Fast-path extraction**: curl-first strategy skips browser for static pages (1.5s vs 5s)
-- **Three automation layers**: agent-browser (headless Playwright) → chrome-cdp (existing Chrome) → ghost-os (desktop GUI)
+- **Four automation layers**: agent-browser (headless Playwright) → browser-use (autonomous AI) → chrome-cdp (existing Chrome) → ghost-os (desktop GUI)
 - **Automatic fallback chain**: SSL errors, WAF detection, timeouts all handled with strategy switching
 - **SPA support**: Waits for JavaScript hydration on React/Vue/Next.js pages
 - **Security hardened**: URL validation prevents command injection, TLS skip only as last resort
@@ -34,7 +34,7 @@ bash install.sh
 
 ## How It Works
 
-### Strategy: 5-Tier Automatic Escalation
+### Strategy: 6-Tier Automatic Escalation
 
 1. **curl fast-path** (1-2s) — works for static content, APIs, server-rendered HTML
 2. **agent-browser** (5-15s) — JavaScript rendering, SPAs, form interaction
@@ -42,6 +42,12 @@ bash install.sh
 3. **chrome-cdp via cdp-eval.mjs** (3-10s) — real Chrome session, bypasses bot detection
 4. **curl -k** (1-2s) — last-resort TLS skip for self-signed certs
 5. **ghost-os** (manual) — desktop apps, CAPTCHA, visual grounding
+
+`extract.mjs` runs tiers 1–4 automatically as a **strategy array loop**: each tier is a function in an array; the loop calls each in order and stops at the first non-empty result. Key internals:
+
+- **`BOT_PATTERNS`** — constant array of strings (`cf-challenge`, `just a moment`, `cloudflare`, etc.) checked against curl and browser output to detect challenge pages before returning content
+- **`buildContentJS(selector)`** — helper that builds the JS extraction expression: CSS selector query when a selector is given, or a smart semantic-element priority scan (`article`, `main`, `[role="main"]`, `.content`, `#content`) falling back to `document.body.innerText`
+- **`findNode22()`** — helper that probes candidate paths for a Node.js ≥22 binary (required for built-in WebSocket used by `cdp-eval.mjs`)
 
 ### Decision Tree
 
@@ -148,6 +154,7 @@ cd /tmp/EvoSkill && uv sync
 # Copy our custom task files
 cp -r ~/Documents/web-interact-skill/evoskill/webextract_agent/ src/agent_profiles/
 cp ~/Documents/web-interact-skill/evoskill/webextract_scorer.py src/evaluation/
+cp ~/Documents/web-interact-skill/evoskill/webextract_task.py src/
 cp ~/Documents/web-interact-skill/evoskill/webextract_benchmark.csv .dataset/
 cp ~/Documents/web-interact-skill/evoskill/run_loop_webextract.py scripts/
 cp ~/Documents/web-interact-skill/evoskill/run_eval_webextract.py scripts/
@@ -190,9 +197,10 @@ Custom scorer supports exact match, CONTAINS:, RANGE:, and DYNAMIC_CHECK pattern
 |------|---------|
 | `skill/SKILL.md` | Main instructions (loaded by Claude Code) |
 | `skill/REFERENCE.md` | Advanced patterns, auth, cookies, network |
-| `skill/scripts/extract.mjs` | One-command extraction with curl→browser→curl-k fallback |
-| `skill/scripts/cdp-eval.mjs` | CDP WebSocket eval helper (Node 22+) |
+| `skill/scripts/extract.mjs` | One-command extraction with strategy array (curl→browser→cdp→curl-k) |
+| `skill/scripts/cdp-eval.mjs` | CDP WebSocket eval helper (Node 22+), copied to skill dir by install.sh |
 | `skill/scripts/test-extract.mjs` | Test harness with 35 diverse URL test cases |
+| `evoskill/webextract_task.py` | Shared task registration module for EvoSkill evaluation scripts |
 
 ## License
 

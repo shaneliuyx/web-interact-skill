@@ -3,7 +3,7 @@
 // Usage: node test-extract.mjs
 // Output: success_count/total on last line (parseable metric)
 
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -86,8 +86,6 @@ const TEST_CASES = [
   { url: 'https://httpbin.org/headers', expect: 'User-Agent', name: 'headers-json' },
 ];
 
-let passed = 0;
-let failed = 0;
 const results = [];
 
 for (const tc of TEST_CASES) {
@@ -96,12 +94,14 @@ for (const tc of TEST_CASES) {
     const args = [EXTRACT, tc.url];
     if (tc.selector) args.push(tc.selector);
 
-    const output = execSync(`node ${args.map(a => `'${a}'`).join(' ')}`, {
+    const result = spawnSync('node', args, {
       encoding: 'utf-8',
       timeout: 30000,
       maxBuffer: 10 * 1024 * 1024,
       stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
+    });
+    if (result.status !== 0) throw new Error(result.stderr?.split('\n')[0] || `exit code ${result.status}`);
+    const output = result.stdout.trim();
 
     const elapsed = Date.now() - start;
     const hasExpected = tc.expect === '' || output.toLowerCase().includes(tc.expect.toLowerCase());
@@ -110,13 +110,10 @@ for (const tc of TEST_CASES) {
     if (tc.expectFail) {
       // For expected failures (404, etc.), passing = script exits non-zero (caught below)
       // If we got here, it means the script returned content — that's actually fine too
-      passed++;
       results.push({ name: tc.name, status: 'PASS', ms: elapsed, chars: output.length, reason: 'got content from error page' });
     } else if (hasExpected && hasContent) {
-      passed++;
       results.push({ name: tc.name, status: 'PASS', ms: elapsed, chars: output.length });
     } else {
-      failed++;
       results.push({
         name: tc.name,
         status: 'FAIL',
@@ -127,13 +124,17 @@ for (const tc of TEST_CASES) {
     }
   } catch (err) {
     const elapsed = Date.now() - start;
-    failed++;
-    results.push({
-      name: tc.name,
-      status: 'ERROR',
-      ms: elapsed,
-      reason: err.message?.split('\n')[0]?.substring(0, 80) || 'unknown',
-    });
+    if (tc.expectFail) {
+      results.push({ name: tc.name, status: 'PASS', ms: elapsed, chars: 0, reason: 'expected failure (non-zero exit)' });
+    } else {
+      results.push({
+        name: tc.name,
+        status: 'ERROR',
+        ms: elapsed,
+        chars: 0,
+        reason: err.message?.split('\n')[0]?.substring(0, 80) || 'unknown',
+      });
+    }
   }
 }
 
@@ -142,10 +143,11 @@ console.log('\n--- Test Results ---');
 for (const r of results) {
   const status = r.status === 'PASS' ? '✓' : '✗';
   const detail = r.reason ? ` (${r.reason})` : '';
-  console.log(`${status} ${r.name.padEnd(20)} ${r.status.padEnd(6)} ${String(r.ms).padStart(5)}ms ${r.chars ? r.chars + ' chars' : ''}${detail}`);
+  console.log(`${status} ${r.name.padEnd(20)} ${r.status.padEnd(6)} ${String(r.ms).padStart(5)}ms ${String(r.chars).padStart(6)} chars${detail}`);
 }
 
-const total = passed + failed;
+const passed = results.filter(r => r.status === 'PASS').length;
+const total = results.length;
 const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
 console.log(`\n--- Summary ---`);
 console.log(`${passed}/${total} passed (${pct}%)`);
