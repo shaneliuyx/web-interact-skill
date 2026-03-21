@@ -73,23 +73,7 @@ After ANY navigation, always re-snapshot: `agent-browser snapshot -i`
 
 When done, close the browser: `agent-browser close`
 
-## Workflow D: browser-use (autonomous multi-step tasks)
-
-When a task requires multiple navigation steps, form filling, or exploration — use browser-use instead of scripting each click with agent-browser.
-
-```bash
-# Simple task — browser-use figures out the steps
-browser-use task "Search for 'Claude Code' on Hacker News and extract the top 3 results"
-
-# Open + interact manually with daemon (persists across calls)
-browser-use open https://example.com
-browser-use state                          # numbered element list
-browser-use click 5                        # click element #5
-browser-use type 3 "search query"          # type into element #3
-browser-use screenshot /tmp/result.png     # capture current state
-browser-use extract "main article text"    # extract with natural language
-browser-use close
-```
+## Workflow B: browser-use (Tier 2.5 — autonomous tasks)
 
 **When to use browser-use vs agent-browser:**
 | Need | Tool |
@@ -99,17 +83,19 @@ browser-use close
 | Autonomous "figure it out" task | browser-use |
 | Precise CSS selector extraction | agent-browser |
 
+Use for tasks requiring 3+ distinct interactions (e.g., search → select result → extract detail).
+
+```bash
+# Simple task — browser-use figures out the steps
+browser-use task "Search for 'Claude Code' on Hacker News and extract the top 3 results"
+```
+
 **With existing Chrome profile** (reuse logins):
 ```bash
 browser-use --profile "Default" task "Check my GitHub notifications"
 ```
 
-**Headed mode** (see the browser):
-```bash
-browser-use --headed open https://example.com
-```
-
-## Workflow B: chrome-cdp (existing login session)
+## Workflow C: chrome-cdp (existing login session)
 
 ```bash
 CDP=~/.claude/skills/chrome-cdp/scripts/cdp.mjs
@@ -120,7 +106,7 @@ $CDP html <target> ".content"        # extract by CSS selector
 $CDP click <target> "button.submit"  # click by CSS selector
 ```
 
-## Workflow C: ghost-os (desktop/visual)
+## Workflow D: ghost-os (desktop/visual)
 
 Use MCP tools directly:
 1. `ghost_context(app="Chrome")` → current state

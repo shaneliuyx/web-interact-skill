@@ -98,6 +98,10 @@ agent-browser click @e3
 agent-browser close
 ```
 
+### browser-use workflow
+
+For multi-step autonomous tasks (3+ distinct interactions), see [SKILL.md](skill/SKILL.md#workflow-b-browser-use-tier-25--autonomous-tasks) for full usage.
+
 ### chrome-cdp workflow
 
 ```bash
