@@ -26,6 +26,7 @@ bash install.sh
 | Tool | Required | Install |
 |------|----------|---------|
 | agent-browser | Yes | `npm i -g agent-browser` |
+| browser-use | Optional | `uv tool install browser-use && browser-use install` |
 | ghost-os | Optional | `brew install ghost-os` |
 | chrome-cdp | Optional | Already included if you have the chrome-cdp skill |
 | Node.js 18+ | Yes | `brew install node` |
@@ -37,6 +38,7 @@ bash install.sh
 
 1. **curl fast-path** (1-2s) — works for static content, APIs, server-rendered HTML
 2. **agent-browser** (5-15s) — JavaScript rendering, SPAs, form interaction
+2.5. **browser-use** (10-60s) — autonomous multi-step tasks, form filling, exploration
 3. **chrome-cdp via cdp-eval.mjs** (3-10s) — real Chrome session, bypasses bot detection
 4. **curl -k** (1-2s) — last-resort TLS skip for self-signed certs
 5. **ghost-os** (manual) — desktop apps, CAPTCHA, visual grounding
@@ -50,6 +52,9 @@ Is it read-only content extraction?
 
 Is it a JavaScript-rendered SPA?
   → agent-browser with wait --load load + delay
+
+Multi-step task (search → click → fill → submit)?
+  → browser-use task "describe the goal"
 
 Need an existing login session?
   → chrome-cdp (connects to your real Chrome)
@@ -123,6 +128,7 @@ $CDP click <target> "button.submit"  # click by CSS selector
 | JS-rendered (HN) | agent-browser | ~5s |
 | CSS selector needed | browser fallback | ~7s |
 | Chrome CDP (logged-in) | chrome-cdp + cdp-eval.mjs | ~5s |
+| Multi-step autonomous task | browser-use | 10-60s |
 
 ## EvoSkill Integration (Optional)
 

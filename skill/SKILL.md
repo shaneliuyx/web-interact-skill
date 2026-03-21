@@ -4,6 +4,7 @@ description: Unified web page interaction when WebFetch fails. Combines agent-br
 allowed-tools:
   - Bash(agent-browser:*)
   - Bash(npx agent-browser:*)
+  - Bash(browser-use:*)
   - Bash(*cdp.mjs*)
   - Bash(curl:*)
   - Bash(node*extract.mjs*)
@@ -25,6 +26,7 @@ allowed-tools:
 
 **1. curl fast-path** (1-2s) — static content, APIs, JSON, XML, plain text.
 **2. agent-browser** (5-15s) — JS rendering, SPAs, form interaction.
+**2.5. browser-use** (10-60s) — autonomous multi-step web tasks. Give a goal, agent plans and executes clicks/navigation/forms.
 **3. chrome-cdp** (3-10s) — real Chrome session via cdp-eval.mjs (Node 22 WebSocket), bypasses bot detection. Auto-tried by `extract.mjs`. Requires Chrome running with `--remote-debugging-port=9222`.
 **4. curl -k** (1-2s) — last-resort TLS skip for self-signed certs.
 **5. ghost-os** (manual) — desktop apps, CAPTCHA, visual grounding. Script outputs `ESCALATE` message; Claude handles via MCP tools.
@@ -71,6 +73,42 @@ After ANY navigation, always re-snapshot: `agent-browser snapshot -i`
 
 When done, close the browser: `agent-browser close`
 
+## Workflow D: browser-use (autonomous multi-step tasks)
+
+When a task requires multiple navigation steps, form filling, or exploration — use browser-use instead of scripting each click with agent-browser.
+
+```bash
+# Simple task — browser-use figures out the steps
+browser-use task "Search for 'Claude Code' on Hacker News and extract the top 3 results"
+
+# Open + interact manually with daemon (persists across calls)
+browser-use open https://example.com
+browser-use state                          # numbered element list
+browser-use click 5                        # click element #5
+browser-use type 3 "search query"          # type into element #3
+browser-use screenshot /tmp/result.png     # capture current state
+browser-use extract "main article text"    # extract with natural language
+browser-use close
+```
+
+**When to use browser-use vs agent-browser:**
+| Need | Tool |
+|------|------|
+| Extract content from a single page | agent-browser (faster) |
+| Multi-step task (search → click → fill → submit) | browser-use |
+| Autonomous "figure it out" task | browser-use |
+| Precise CSS selector extraction | agent-browser |
+
+**With existing Chrome profile** (reuse logins):
+```bash
+browser-use --profile "Default" task "Check my GitHub notifications"
+```
+
+**Headed mode** (see the browser):
+```bash
+browser-use --headed open https://example.com
+```
+
 ## Workflow B: chrome-cdp (existing login session)
 
 ```bash
@@ -100,6 +138,7 @@ Use MCP tools directly:
 | Empty body / blank page | SPA not hydrated | `wait --fn` for specific element, or increase delay |
 | `net::ERR_NAME_NOT_RESOLVED` | DNS failure | Check URL, try curl fallback |
 | CAPTCHA / challenge page | Bot protection | Use chrome-cdp with real session, or ghost-os |
+| `browser-use` timeout / stuck | Complex page, agent confused | Simplify task description, or fall back to agent-browser for manual steps |
 
 ## Helper Script
 

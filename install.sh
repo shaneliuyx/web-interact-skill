@@ -28,6 +28,12 @@ else
     echo "  ✗ agent-browser not found. Install: npm i -g agent-browser"
 fi
 
+if command -v browser-use &>/dev/null; then
+    echo "  ✓ browser-use CLI found"
+else
+    echo "  ✗ browser-use not found (optional — install with: uv tool install browser-use && browser-use install)"
+fi
+
 if command -v ghost &>/dev/null; then
     echo "  ✓ ghost-os $(ghost --version 2>/dev/null)"
 else
